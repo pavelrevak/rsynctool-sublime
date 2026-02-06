@@ -1,0 +1,46 @@
+[
+    {
+        "id": "tools",
+        "children": [
+            {
+                "caption": "Rsync",
+                "children": [
+                    {"caption": "New Project...", "command": "rsync_new_project"},
+                    {"caption": "Project Settings", "command": "rsync_project_settings"},
+                    {"caption": "-"},
+                    {"caption": "Push to Remote", "command": "rsync_sync"},
+                    {"caption": "Dry Run", "command": "rsync_dry_run"},
+                    {"caption": "Stop", "command": "rsync_stop"},
+                    {"caption": "-"},
+                    {"caption": "Select Project...", "command": "rsync_select_project"},
+                    {"caption": "Select Target...", "command": "rsync_select_target"}
+                ]
+            }
+        ]
+    },
+    {
+        "id": "preferences",
+        "children": [
+            {
+                "caption": "Package Settings",
+                "mnemonic": "P",
+                "id": "package-settings",
+                "children": [
+                    {
+                        "caption": "rsync-sublime",
+                        "children": [
+                            {
+                                "caption": "Settings",
+                                "command": "edit_settings",
+                                "args": {
+                                    "base_file": "${packages}/rsync-sublime/rsyncproject.sublime-settings",
+                                    "default": "{\n\t$0\n}\n"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]

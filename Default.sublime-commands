@@ -1,0 +1,9 @@
+[
+    {"caption": "RSYNC: New Project...", "command": "rsync_new_project"},
+    {"caption": "RSYNC: Project Settings", "command": "rsync_project_settings"},
+    {"caption": "RSYNC: Push to Remote", "command": "rsync_sync"},
+    {"caption": "RSYNC: Dry Run", "command": "rsync_dry_run"},
+    {"caption": "RSYNC: Stop", "command": "rsync_stop"},
+    {"caption": "RSYNC: Select Project...", "command": "rsync_select_project"},
+    {"caption": "RSYNC: Select Target...", "command": "rsync_select_target"}
+]

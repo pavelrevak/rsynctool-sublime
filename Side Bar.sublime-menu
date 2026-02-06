@@ -1,0 +1,34 @@
+[
+    {"caption": "-", "id": "tools_separator"},
+    {
+        "caption": "Rsync",
+        "children": [
+            {
+                "caption": "New Project...",
+                "command": "rsync_new_project",
+                "args": {"paths": []}
+            },
+            {
+                "caption": "Project Settings",
+                "command": "rsync_project_settings"
+            },
+            {"caption": "-"},
+            {
+                "caption": "Add to Sources",
+                "command": "rsync_add_to_sources",
+                "args": {"paths": []}
+            },
+            {
+                "caption": "Add to Exclude",
+                "command": "rsync_add_to_exclude",
+                "args": {"paths": []}
+            },
+            {"caption": "-"},
+            {
+                "caption": "Add to Other Project...",
+                "command": "rsync_add_to_other_project",
+                "args": {"paths": []}
+            }
+        ]
+    }
+]
