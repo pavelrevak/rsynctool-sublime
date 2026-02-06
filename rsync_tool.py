@@ -86,14 +86,18 @@ def get_active_target(config):
 class RsyncContext:
     """Context for current rsync project"""
 
-    _current = None  # manually selected project
+    _current = {}  # manually selected project per window {window_id: path}
 
     @classmethod
     def get(cls, view):
         """Get context for view"""
-        # 1. Manually selected
-        if cls._current and os.path.exists(cls._current):
-            return cls._current
+        window = view.window() if view else sublime.active_window()
+
+        # 1. Manually selected (per window)
+        if window:
+            current = cls._current.get(window.id())
+            if current and os.path.exists(current):
+                return current
 
         # 2. Search from active file
         if view and view.file_name():
@@ -102,7 +106,6 @@ class RsyncContext:
                 return found
 
         # 3. Search in open folders
-        window = view.window() if view else sublime.active_window()
         if window:
             for folder in window.folders():
                 found = find_rsyncproject(folder)
@@ -112,14 +115,19 @@ class RsyncContext:
         return None
 
     @classmethod
-    def set(cls, path):
-        """Manually set project"""
-        cls._current = path
+    def set(cls, window, path):
+        """Manually set project for window"""
+        cls._current[window.id()] = path
 
     @classmethod
-    def clear(cls):
-        """Clear manual selection"""
-        cls._current = None
+    def clear(cls, window):
+        """Clear manual selection for window"""
+        cls._current.pop(window.id(), None)
+
+    @classmethod
+    def is_manual(cls, window):
+        """Check if window has manual project selection"""
+        return window is not None and window.id() in cls._current
 
 
 class RsyncProcessManager:
@@ -378,7 +386,7 @@ class RsyncNewProjectCommand(sublime_plugin.WindowCommand):
         }
         save_rsyncproject(path, config)
 
-        RsyncContext.set(path)
+        RsyncContext.set(self.window, path)
 
         view = self.window.active_view()
         if view:
@@ -423,7 +431,7 @@ class RsyncSelectProjectCommand(sublime_plugin.WindowCommand):
 
         view = self.window.active_view()
         current = RsyncContext.get(view) if view else None
-        is_manual = RsyncContext._current is not None
+        is_manual = RsyncContext.is_manual(self.window)
 
         items = []
         self._projects = [None]  # None = auto mode
@@ -447,9 +455,9 @@ class RsyncSelectProjectCommand(sublime_plugin.WindowCommand):
             if index < 0:
                 return
             if index == 0:
-                RsyncContext.clear()
+                RsyncContext.clear(self.window)
             else:
-                RsyncContext.set(self._projects[index])
+                RsyncContext.set(self.window, self._projects[index])
 
             view = self.window.active_view()
             if view:
