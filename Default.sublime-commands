@@ -1,23 +1,23 @@
 [
-    {"caption": "RSYNC: New Project...", "command": "rsync_new_project"},
+    {"caption": "Rsync: New Project...", "command": "rsync_new_project"},
     {
-        "caption": "RSYNC: Project Settings...",
+        "caption": "Rsync: Project Settings...",
         "command": "rsync_project_settings",
         "args": {"pick": true}
     },
-    {"caption": "RSYNC: Push to Remote", "command": "rsync_sync"},
+    {"caption": "Rsync: Push to Remote", "command": "rsync_sync"},
     {
-        "caption": "RSYNC: Push to Remote...",
+        "caption": "Rsync: Push to Remote...",
         "command": "rsync_sync",
         "args": {"pick": true}
     },
     {
-        "caption": "RSYNC: Dry Run...",
+        "caption": "Rsync: Dry Run...",
         "command": "rsync_dry_run",
         "args": {"pick": true}
     },
-    {"caption": "RSYNC: Stop", "command": "rsync_stop"},
-    {"caption": "RSYNC: Select Project/Target...", "command": "rsync_select"},
+    {"caption": "Rsync: Stop", "command": "rsync_stop"},
+    {"caption": "Rsync: Select Project/Target...", "command": "rsync_select"},
     {
         "caption": "Preferences: RsyncTool Settings",
         "command": "edit_settings",

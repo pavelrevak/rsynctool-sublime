@@ -17,9 +17,9 @@ Push files to remote servers via rsync directly from Sublime Text. Configure mul
 ## Quick Start
 
 1. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-2. Run `RSYNC: New Project...` to create `.rsyncproject` in your project root
+2. Run `Rsync: New Project...` to create `.rsyncproject` in your project root
 3. Edit `.rsyncproject` - configure target and sources
-4. Use `RSYNC: Push to Remote` (`Cmd+Option+R`) to sync
+4. Use `Rsync: Push to Remote` (`Cmd+Option+R`) to sync
 
 ## Installation
 
@@ -51,7 +51,7 @@ ln -s /path/to/rsynctool-sublime ~/.config/sublime-text/Packages/rsynctool-subli
 
 ## Commands
 
-All commands available via Command Palette (`Cmd+Shift+P`) with `RSYNC:` prefix.
+All commands available via Command Palette (`Cmd+Shift+P`) with `Rsync:` prefix.
 
 | Command | Description |
 |---------|-------------|
@@ -72,7 +72,7 @@ All commands available via Command Palette (`Cmd+Shift+P`) with `RSYNC:` prefix.
 
 ## Sidebar Menu
 
-Right-click on files/folders → **RsyncTool**:
+Right-click on files/folders → **Rsync**:
 
 - **New Project...** - Create new project here
 - **Project Settings** - Open project configuration

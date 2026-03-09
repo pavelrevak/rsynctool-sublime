@@ -1,7 +1,7 @@
 [
     {"caption": "-", "id": "tools_separator"},
     {
-        "caption": "RsyncTool",
+        "caption": "Rsync",
         "children": [
             {
                 "caption": "New Project...",
