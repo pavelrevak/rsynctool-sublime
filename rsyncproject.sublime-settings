@@ -1,3 +1,8 @@
 {
-    "rsync_path": "rsync"
+    // Path to rsync binary
+    "rsync_path": "rsync",
+
+    // Show output console during sync
+    // If false, console is hidden but will appear on error
+    "show_console_during_sync": true
 }

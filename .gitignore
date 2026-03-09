@@ -5,3 +5,4 @@ __pycache__
 !.gitignore
 !.gitattributes
 !.sublimeignore
+!.python-version

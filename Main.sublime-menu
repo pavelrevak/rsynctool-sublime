@@ -6,14 +6,24 @@
                 "caption": "Rsync",
                 "children": [
                     {"caption": "New Project...", "command": "rsync_new_project"},
-                    {"caption": "Project Settings", "command": "rsync_project_settings"},
+                    {
+                        "caption": "Project Settings...",
+                        "command": "rsync_project_settings",
+                        "args": {"pick": true}
+                    },
                     {"caption": "-"},
                     {"caption": "Push to Remote", "command": "rsync_sync"},
-                    {"caption": "Dry Run", "command": "rsync_dry_run"},
-                    {"caption": "Stop", "command": "rsync_stop"},
-                    {"caption": "-"},
-                    {"caption": "Select Project...", "command": "rsync_select_project"},
-                    {"caption": "Select Target...", "command": "rsync_select_target"}
+                    {
+                        "caption": "Push to Remote...",
+                        "command": "rsync_sync",
+                        "args": {"pick": true}
+                    },
+                    {
+                        "caption": "Dry Run...",
+                        "command": "rsync_dry_run",
+                        "args": {"pick": true}
+                    },
+                    {"caption": "Stop", "command": "rsync_stop"}
                 ]
             }
         ]
@@ -27,14 +37,22 @@
                 "id": "package-settings",
                 "children": [
                     {
-                        "caption": "rsync-sublime",
+                        "caption": "RsyncTool",
                         "children": [
                             {
                                 "caption": "Settings",
                                 "command": "edit_settings",
                                 "args": {
                                     "base_file": "${packages}/rsync-sublime/rsyncproject.sublime-settings",
+                                    "user_file": "${packages}/User/rsyncproject.sublime-settings",
                                     "default": "{\n\t$0\n}\n"
+                                }
+                            },
+                            {
+                                "caption": "Key Bindings",
+                                "command": "open_file",
+                                "args": {
+                                    "file": "${packages}/rsync-sublime/Default (${platform}).sublime-keymap"
                                 }
                             }
                         ]

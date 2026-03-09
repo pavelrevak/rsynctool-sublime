@@ -1,0 +1,4 @@
+[
+    {"keys": ["ctrl+alt+r"], "command": "rsync_sync"},
+    {"keys": ["ctrl+alt+shift+r"], "command": "rsync_dry_run"}
+]

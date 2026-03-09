@@ -1,9 +1,37 @@
 [
     {"caption": "RSYNC: New Project...", "command": "rsync_new_project"},
-    {"caption": "RSYNC: Project Settings", "command": "rsync_project_settings"},
+    {
+        "caption": "RSYNC: Project Settings...",
+        "command": "rsync_project_settings",
+        "args": {"pick": true}
+    },
     {"caption": "RSYNC: Push to Remote", "command": "rsync_sync"},
-    {"caption": "RSYNC: Dry Run", "command": "rsync_dry_run"},
+    {
+        "caption": "RSYNC: Push to Remote...",
+        "command": "rsync_sync",
+        "args": {"pick": true}
+    },
+    {
+        "caption": "RSYNC: Dry Run...",
+        "command": "rsync_dry_run",
+        "args": {"pick": true}
+    },
     {"caption": "RSYNC: Stop", "command": "rsync_stop"},
-    {"caption": "RSYNC: Select Project...", "command": "rsync_select_project"},
-    {"caption": "RSYNC: Select Target...", "command": "rsync_select_target"}
+    {"caption": "RSYNC: Select Project/Target...", "command": "rsync_select"},
+    {
+        "caption": "Preferences: RsyncTool Settings",
+        "command": "edit_settings",
+        "args": {
+            "base_file": "${packages}/rsync-sublime/rsyncproject.sublime-settings",
+            "user_file": "${packages}/User/rsyncproject.sublime-settings",
+            "default": "{\n\t$0\n}\n"
+        }
+    },
+    {
+        "caption": "Preferences: RsyncTool Key Bindings",
+        "command": "open_file",
+        "args": {
+            "file": "${packages}/rsync-sublime/Default (${platform}).sublime-keymap"
+        }
+    }
 ]
