@@ -31,7 +31,7 @@ def find_rsyncproject(path):
 def load_rsyncproject(path):
     """Load .rsyncproject, return {} if empty, None on JSON error"""
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
             if not content:
                 return {}
@@ -46,7 +46,7 @@ def load_rsyncproject(path):
 
 def save_rsyncproject(path, config):
     """Save config to .rsyncproject file"""
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4)
         f.write('\n')
 
@@ -843,7 +843,8 @@ class RsyncAddToListCommand(sublime_plugin.WindowCommand):
             return
 
         self._root = get_project_root(self._rsyncproject)
-        self._rel_path = os.path.relpath(self._path, self._root)
+        # Use forward slashes for rsync compatibility (even on Windows)
+        self._rel_path = os.path.relpath(self._path, self._root).replace('\\', '/')
 
         self._config = load_rsyncproject(self._rsyncproject)
         if self._config is None:
@@ -959,7 +960,8 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
 
         self._rsyncproject = self._projects[index]
         self._root = get_project_root(self._rsyncproject)
-        self._rel_path = os.path.relpath(self._path, self._root)
+        # Use forward slashes for rsync compatibility (even on Windows)
+        self._rel_path = os.path.relpath(self._path, self._root).replace('\\', '/')
 
         self._config = load_rsyncproject(self._rsyncproject)
         if self._config is None:

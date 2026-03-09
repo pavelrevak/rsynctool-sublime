@@ -1,4 +1,4 @@
-# rsync-sublime - Sublime Text Plugin
+# RsyncTool - Sublime Text Plugin
 
 Sublime Text 4 plugin for rsync synchronization.
 
@@ -23,14 +23,30 @@ Push files to remote servers via rsync directly from Sublime Text. Configure mul
 
 ## Installation
 
-### Symlink
+### Package Control
+
+1. Install [Package Control](https://packagecontrol.io/installation)
+2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+3. Run `Package Control: Install Package`
+4. Search for `RsyncTool` and install
+
+### Git Clone
+
+```bash
+cd ~/Library/Application\ Support/Sublime\ Text/Packages  # macOS
+cd ~/.config/sublime-text/Packages  # Linux
+
+git clone https://github.com/pavelrevak/rsynctool-sublime.git
+```
+
+### Symlink (Development)
 
 ```bash
 # macOS
-ln -s /path/to/rsync-sublime ~/Library/Application\ Support/Sublime\ Text/Packages/rsync-sublime
+ln -s /path/to/rsynctool-sublime ~/Library/Application\ Support/Sublime\ Text/Packages/rsynctool-sublime
 
 # Linux
-ln -s /path/to/rsync-sublime ~/.config/sublime-text/Packages/rsync-sublime
+ln -s /path/to/rsynctool-sublime ~/.config/sublime-text/Packages/rsynctool-sublime
 ```
 
 ## Commands
@@ -56,7 +72,7 @@ All commands available via Command Palette (`Cmd+Shift+P`) with `RSYNC:` prefix.
 
 ## Sidebar Menu
 
-Right-click on files/folders → **Rsync**:
+Right-click on files/folders → **RsyncTool**:
 
 - **New Project...** - Create new project here
 - **Project Settings** - Open project configuration
@@ -111,7 +127,7 @@ Dry run adds `-n` to flags. CWD is set to project root (directory containing `.r
 
 ### Plugin Settings
 
-`Preferences → Package Settings → rsync-sublime → Settings`:
+`Preferences → Package Settings → RsyncTool → Settings`:
 
 ```json
 {

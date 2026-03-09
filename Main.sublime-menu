@@ -3,7 +3,7 @@
         "id": "tools",
         "children": [
             {
-                "caption": "Rsync",
+                "caption": "RsyncTool",
                 "children": [
                     {"caption": "New Project...", "command": "rsync_new_project"},
                     {
@@ -43,7 +43,7 @@
                                 "caption": "Settings",
                                 "command": "edit_settings",
                                 "args": {
-                                    "base_file": "${packages}/rsync-sublime/rsyncproject.sublime-settings",
+                                    "base_file": "${packages}/rsynctool-sublime/rsyncproject.sublime-settings",
                                     "user_file": "${packages}/User/rsyncproject.sublime-settings",
                                     "default": "{\n\t$0\n}\n"
                                 }
@@ -52,7 +52,7 @@
                                 "caption": "Key Bindings",
                                 "command": "open_file",
                                 "args": {
-                                    "file": "${packages}/rsync-sublime/Default (${platform}).sublime-keymap"
+                                    "file": "${packages}/rsynctool-sublime/Default (${platform}).sublime-keymap"
                                 }
                             }
                         ]

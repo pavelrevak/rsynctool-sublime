@@ -1,0 +1,13 @@
+RsyncTool
+=========
+
+Thank you for installing RsyncTool!
+
+Quick Start:
+1. Ctrl+Shift+P (Cmd+Shift+P on macOS) → "RSYNC: New Project..."
+2. Edit .rsyncproject - configure target and sources
+3. Ctrl+Alt+R (Cmd+Option+R on macOS) to sync
+
+Or right-click on file/folder → RsyncTool → Add to Sources/Exclude
+
+Documentation: https://github.com/pavelrevak/rsynctool-sublime
