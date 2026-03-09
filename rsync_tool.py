@@ -10,7 +10,6 @@ import subprocess
 import threading
 import json
 import os
-import re
 import shlex
 
 
@@ -36,10 +35,9 @@ def load_rsyncproject(path):
             content = f.read().strip()
             if not content:
                 return {}
-            # Remove trailing commas (not valid JSON but common)
-            content = re.sub(r',\s*([}\]])', r'\1', content)
-            return json.loads(content)
-    except json.JSONDecodeError as e:
+            # Use ST's decoder (supports trailing commas and comments)
+            return sublime.decode_value(content)
+    except ValueError as e:
         print(f"RsyncTool: Invalid JSON in {path}: {e}")
         return None
     except IOError:
@@ -65,7 +63,6 @@ def get_project_name(rsyncproject_path):
         return config.get(
             'name') or os.path.basename(os.path.dirname(rsyncproject_path))
     return os.path.basename(os.path.dirname(rsyncproject_path))
-
 
 
 def get_active_target(config):
@@ -192,53 +189,88 @@ class RsyncContext:
 
 
 class RsyncProcessManager:
-    """Manages running rsync process"""
-    _process = None
-    _status_info = None  # (project_name, target_name)
-    _status_phase = 0
+    """Manages running rsync processes per window"""
+    _processes = {}  # {window_id: process}
+    _status_info = {}  # {window_id: (project_name, target_name)}
+    _status_phases = {}  # {window_id: phase}
+    _animating = False
 
     @classmethod
-    def set(cls, process, project_name=None, target_name=None):
-        cls.stop()
-        cls._process = process
-        cls._status_info = (project_name, target_name)
-        cls._status_phase = 0
-        cls._animate_status()
+    def set(cls, window_id, process, project_name=None, target_name=None):
+        cls.stop(window_id)
+        cls._processes[window_id] = process
+        cls._status_info[window_id] = (project_name, target_name)
+        cls._status_phases[window_id] = 0
+        if not cls._animating:
+            cls._animating = True
+            cls._animate_status()
 
     @classmethod
-    def stop(cls):
-        if cls._process and cls._process.poll() is None:
-            cls._process.terminate()
-        cls._process = None
-        cls._status_info = None
+    def stop(cls, window_id):
+        process = cls._processes.get(window_id)
+        if process and process.poll() is None:
+            process.terminate()
+        cls._processes.pop(window_id, None)
+        cls._status_info.pop(window_id, None)
+        cls._status_phases.pop(window_id, None)
 
     @classmethod
-    def is_running(cls):
-        return cls._process is not None and cls._process.poll() is None
+    def stop_all(cls):
+        for window_id in list(cls._processes.keys()):
+            cls.stop(window_id)
+
+    @classmethod
+    def is_running(cls, window_id):
+        process = cls._processes.get(window_id)
+        return process is not None and process.poll() is None
 
     @classmethod
     def _animate_status(cls):
-        """Animate status bar while rsync is running"""
-        if not cls.is_running():
+        """Animate status bar for all running rsync processes"""
+        # Clean up finished processes
+        for window_id in list(cls._processes.keys()):
+            process = cls._processes.get(window_id)
+            if process and process.poll() is not None:
+                cls._processes.pop(window_id, None)
+                cls._status_info.pop(window_id, None)
+                cls._status_phases.pop(window_id, None)
+
+        if not cls._processes:
+            cls._animating = False
             return
 
-        window = sublime.active_window()
-        view = window.active_view() if window else None
-        if not view:
-            sublime.set_timeout(cls._animate_status, 100)
-            return
-
-        project_name, target_name = cls._status_info or ('', '')
         symbols = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-        symbol = symbols[cls._status_phase % len(symbols)]
-        cls._status_phase += 1
 
-        if target_name:
-            status = f'RSYNC: {project_name}/{target_name} {symbol}'
-        else:
-            status = f'RSYNC: {project_name} {symbol}'
+        for window_id, process in cls._processes.items():
+            if process.poll() is not None:
+                continue
 
-        view.set_status('rsync', status)
+            window = None
+            for w in sublime.windows():
+                if w.id() == window_id:
+                    window = w
+                    break
+
+            if not window:
+                continue
+
+            view = window.active_view()
+            if not view:
+                continue
+
+            project_name, target_name = cls._status_info.get(
+                window_id, ('', ''))
+            phase = cls._status_phases.get(window_id, 0)
+            symbol = symbols[phase % len(symbols)]
+            cls._status_phases[window_id] = phase + 1
+
+            if target_name:
+                status = f'RSYNC: {project_name}/{target_name} {symbol}'
+            else:
+                status = f'RSYNC: {project_name} {symbol}'
+
+            view.set_status('rsync', status)
+
         sublime.set_timeout(cls._animate_status, 100)
 
 
@@ -246,7 +278,7 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
     """Base class for rsync commands"""
 
     panel_name = 'rsync'
-    _panel = None
+    _panels = {}  # {window_id: panel}
 
     def get_context(self, required=True):
         """Get .rsyncproject and its config"""
@@ -272,11 +304,12 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
         return rsyncproject, config
 
     def get_panel(self, clear=False):
-        """Get or create output panel"""
-        if clear or RsyncToolCommand._panel is None:
-            RsyncToolCommand._panel = self.window.create_output_panel(
+        """Get or create output panel for this window"""
+        window_id = self.window.id()
+        if clear or window_id not in RsyncToolCommand._panels:
+            RsyncToolCommand._panels[window_id] = self.window.create_output_panel(
                 self.panel_name)
-        return RsyncToolCommand._panel
+        return RsyncToolCommand._panels[window_id]
 
     def show_panel(self):
         """Show output panel"""
@@ -296,6 +329,7 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
         rsync_path = settings.get('rsync_path', 'rsync')
 
         cmd = [rsync_path] + args
+        window_id = self.window.id()
 
         self.get_panel(clear=clear)
         if show_console:
@@ -304,13 +338,14 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
 
         thread = threading.Thread(
             target=self._run_process,
-            args=(cmd, cwd, project_name, target_name))
+            args=(cmd, cwd, window_id, project_name, target_name))
         thread.start()
 
-    def _run_process(self, cmd, cwd, project_name=None, target_name=None):
+    def _run_process(self, cmd, cwd, window_id, project_name=None,
+            target_name=None):
         """Run process and stream output"""
         try:
-            RsyncProcessManager.stop()
+            RsyncProcessManager.stop(window_id)
 
             env = os.environ.copy()
 
@@ -322,7 +357,7 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
                 env=env,
                 text=True)
 
-            RsyncProcessManager.set(process, project_name, target_name)
+            RsyncProcessManager.set(window_id, process, project_name, target_name)
 
             while True:
                 line = process.stdout.readline()
@@ -541,14 +576,14 @@ class RsyncDryRunCommand(RsyncToolCommand):
 
 
 class RsyncStopCommand(sublime_plugin.WindowCommand):
-    """Stop running rsync process"""
+    """Stop running rsync process for this window"""
 
     def run(self):
-        RsyncProcessManager.stop()
+        RsyncProcessManager.stop(self.window.id())
         sublime.status_message("RsyncTool: stopped")
 
     def is_enabled(self):
-        return RsyncProcessManager.is_running()
+        return RsyncProcessManager.is_running(self.window.id())
 
 
 class RsyncNewProjectCommand(sublime_plugin.WindowCommand):
@@ -1015,3 +1050,7 @@ class RsyncEventListener(sublime_plugin.EventListener):
     def on_activated(self, view):
         """Update status bar when switching tabs"""
         view.run_command('rsync_update_status')
+
+    def on_exit(self):
+        """Stop all rsync processes when Sublime Text exits"""
+        RsyncProcessManager.stop_all()
