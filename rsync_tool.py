@@ -373,25 +373,29 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
                 lambda: self.append_output(
                     f"\n[Finished with code {returncode}]\n"), 0)
 
-            # On error, show panel and popup
+            # Show status message
             if returncode != 0:
                 sublime.set_timeout(
-                    lambda: self._on_error(returncode), 0)
-
-            # Update status bar
-            sublime.set_timeout(lambda: self._update_status(), 0)
+                    lambda rc=returncode: self._on_error(rc), 0)
+                # Restore normal status after 10 seconds
+                sublime.set_timeout(self._update_status, 10000)
+            else:
+                sublime.set_timeout(
+                    lambda: sublime.status_message("RsyncTool: sync completed"), 0)
+                # Restore normal status after 10 seconds
+                sublime.set_timeout(self._update_status, 10000)
 
         except FileNotFoundError:
             sublime.set_timeout(
                 lambda: self._on_error(None, f"rsync not found: {cmd[0]}"), 0)
 
     def _on_error(self, returncode, message=None):
-        """Handle rsync error - show panel and popup"""
+        """Handle rsync error - show panel and status message"""
         self.show_panel()
         if message:
-            sublime.error_message(message)
+            sublime.status_message(f"RsyncTool: {message}")
         else:
-            sublime.error_message(f"rsync failed with code {returncode}")
+            sublime.status_message(f"RsyncTool: sync failed (code {returncode})")
 
     def _update_status(self):
         """Update status bar"""
@@ -542,10 +546,9 @@ class RsyncSyncCommand(RsyncToolCommand):
 
         # Build rsync command
         flags = config.get('flags', '-rv')
+        args = shlex.split(flags)
         if dry_run:
-            flags = flags + 'n'
-
-        args = [flags]
+            args.append('-n')
 
         # --delete flag
         if config.get('delete', False):
@@ -584,6 +587,18 @@ class RsyncStopCommand(sublime_plugin.WindowCommand):
 
     def is_enabled(self):
         return RsyncProcessManager.is_running(self.window.id())
+
+
+class RsyncToggleConsoleCommand(sublime_plugin.WindowCommand):
+    """Toggle show_console_during_sync setting"""
+
+    def run(self):
+        settings = sublime.load_settings('rsyncproject.sublime-settings')
+        current = settings.get('show_console_during_sync', True)
+        settings.set('show_console_during_sync', not current)
+        sublime.save_settings('rsyncproject.sublime-settings')
+        state = "ON" if not current else "OFF"
+        sublime.status_message(f"RsyncTool: console during sync {state}")
 
 
 class RsyncNewProjectCommand(sublime_plugin.WindowCommand):
@@ -938,10 +953,10 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
         # Find all projects in open folders
         self._projects = []
         for folder in self.window.folders():
-            for root, dirs, files in os.walk(folder):
+            for rsync_root, dirs, files in os.walk(folder):
                 if '.rsyncproject' in files:
                     self._projects.append(
-                        os.path.join(root, '.rsyncproject'))
+                        os.path.join(rsync_root, '.rsyncproject'))
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
 
         if not self._projects:
@@ -974,7 +989,7 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
     def _show_target_picker(self):
         """Show quick panel to select global or specific target"""
         targets = self._config.get('targets', {})
-        active = self._config.get('active_target')
+        # active_target could be used to highlight in picker (TODO)
 
         items = []
         self._target_names = [None]  # None = global
@@ -1019,7 +1034,7 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
         if not paths:
             return False
         for folder in self.window.folders():
-            for root, dirs, files in os.walk(folder):
+            for _root, dirs, files in os.walk(folder):
                 if '.rsyncproject' in files:
                     return True
                 dirs[:] = [d for d in dirs if not d.startswith('.')]

@@ -91,7 +91,11 @@ Create `.rsyncproject` in your project root:
     "name": "my-project",
     "targets": {
         "dev": "user@dev-server:project/DEV/",
-        "production": "user@prod-server:project/PROD/"
+        "production": {
+            "destination": "user@prod-server:project/PROD/",
+            "sources": ["src", "config"],
+            "exclude": [".*", "*.pyc", "__pycache__", "tests"]
+        }
     },
     "active_target": "dev",
     "sources": ["src", "lib", "config"],
@@ -131,9 +135,15 @@ Dry run adds `-n` to flags. CWD is set to project root (directory containing `.r
 
 ```json
 {
-    "rsync_path": "rsync"
+    "rsync_path": "rsync",
+    "show_console_during_sync": true
 }
 ```
+
+| Setting | Description |
+|---------|-------------|
+| `rsync_path` | Path to rsync binary (default: `"rsync"`) |
+| `show_console_during_sync` | Show output panel during sync (default: `true`). If `false`, panel appears only on error. |
 
 ## Requirements
 

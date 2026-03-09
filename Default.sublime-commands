@@ -18,6 +18,7 @@
     },
     {"caption": "Rsync: Stop", "command": "rsync_stop"},
     {"caption": "Rsync: Select Project/Target...", "command": "rsync_select"},
+    {"caption": "Rsync: Toggle Console", "command": "rsync_toggle_console"},
     {
         "caption": "Preferences: RsyncTool Settings",
         "command": "edit_settings",
