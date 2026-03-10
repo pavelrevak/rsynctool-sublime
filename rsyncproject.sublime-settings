@@ -4,5 +4,9 @@
 
     // Show output console during sync
     // If false, console is hidden but will appear on error
-    "show_console_during_sync": true
+    "show_console_during_sync": true,
+
+    // Auto-sync on save (default false)
+    // Can be overridden per-project or per-target in .rsyncproject
+    "rsync_on_save": false
 }

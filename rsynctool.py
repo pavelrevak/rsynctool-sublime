@@ -81,6 +81,64 @@ def get_active_target(config):
     return name, targets[name]
 
 
+def find_all_rsyncprojects(window):
+    """Find all .rsyncproject files in window's open folders"""
+    projects = []
+    for folder in window.folders():
+        for root, dirs, files in os.walk(folder):
+            if '.rsyncproject' in files:
+                projects.append(os.path.join(root, '.rsyncproject'))
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+    return projects
+
+
+def build_project_items(projects, current=None):
+    """Build quick panel items for project picker.
+
+    Returns (items, selected_index) where items is list of [label, path].
+    """
+    items = []
+    selected_index = 0
+    for i, p in enumerate(projects):
+        name = get_project_name(p)
+        if p == current:
+            label = f"● {name}"
+            selected_index = i
+        else:
+            label = f"  {name}"
+        items.append([label, os.path.dirname(p)])
+    return items, selected_index
+
+
+def build_target_items(config):
+    """Build quick panel items for target picker.
+
+    Returns (items, target_names, selected_index).
+    """
+    targets = config.get('targets', {})
+    active = config.get('active_target')
+
+    items = []
+    target_names = []
+    selected_index = 0
+
+    for i, (name, value) in enumerate(targets.items()):
+        destination, target_sources, _ = parse_target(value)
+        if name == active:
+            label = f"● {name}"
+            selected_index = i
+        else:
+            label = f"  {name}"
+        if target_sources:
+            detail = f"{destination} ({len(target_sources)} sources)"
+        else:
+            detail = destination
+        items.append([label, detail])
+        target_names.append(name)
+
+    return items, target_names, selected_index
+
+
 def parse_target(target_value):
     """Parse target value (string or object).
 
@@ -241,8 +299,17 @@ class RsyncContext:
     _current = {}  # manually selected project per window {window_id: path}
 
     @classmethod
+    def _cleanup(cls):
+        """Remove entries for closed windows"""
+        valid_ids = {w.id() for w in sublime.windows()}
+        for window_id in list(cls._current.keys()):
+            if window_id not in valid_ids:
+                del cls._current[window_id]
+
+    @classmethod
     def get(cls, view):
         """Get context for view"""
+        cls._cleanup()
         window = view.window() if view else sublime.active_window()
 
         # 1. Manually selected (per window)
@@ -374,6 +441,14 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
     panel_name = 'rsync'
     _panels = {}  # {window_id: panel}
 
+    @classmethod
+    def _cleanup_panels(cls):
+        """Remove panels for closed windows"""
+        valid_ids = {w.id() for w in sublime.windows()}
+        for window_id in list(cls._panels.keys()):
+            if window_id not in valid_ids:
+                del cls._panels[window_id]
+
     def get_context(self, required=True):
         """Get .rsyncproject and its config"""
         view = self.window.active_view()
@@ -399,6 +474,7 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
 
     def get_panel(self, clear=False):
         """Get or create output panel for this window"""
+        self._cleanup_panels()
         window_id = self.window.id()
         if clear or window_id not in RsyncToolCommand._panels:
             RsyncToolCommand._panels[window_id] = self.window.create_output_panel(
@@ -516,31 +592,14 @@ class RsyncSyncCommand(RsyncToolCommand):
 
     def _show_project_picker(self):
         """Show project selection, then target selection"""
-        self._projects = []
-        for folder in self.window.folders():
-            for root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    self._projects.append(
-                        os.path.join(root, '.rsyncproject'))
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-
+        self._projects = find_all_rsyncprojects(self.window)
         if not self._projects:
             sublime.error_message("No .rsyncproject found")
             return
 
         view = self.window.active_view()
         current = RsyncContext.get(view) if view else None
-
-        items = []
-        selected_index = 0
-        for i, p in enumerate(self._projects):
-            name = get_project_name(p)
-            if p == current:
-                label = f"● {name}"
-                selected_index = i
-            else:
-                label = f"  {name}"
-            items.append([label, os.path.dirname(p)])
+        items, selected_index = build_project_items(self._projects, current)
 
         self.window.show_quick_panel(
             items, self._on_project_select, selected_index=selected_index)
@@ -555,35 +614,16 @@ class RsyncSyncCommand(RsyncToolCommand):
             sublime.error_message("Invalid JSON in .rsyncproject")
             return
 
-        # Show target picker
         self._show_target_picker()
 
     def _show_target_picker(self):
         """Show target selection"""
-        targets = self._config.get('targets', {})
-        if not targets:
+        if not self._config.get('targets'):
             sublime.error_message("No targets configured")
             return
 
-        active = self._config.get('active_target')
-
-        items = []
-        self._target_names = []
-        selected_index = 0
-
-        for i, (name, value) in enumerate(targets.items()):
-            destination, target_sources, _ = parse_target(value)
-            if name == active:
-                label = f"● {name}"
-                selected_index = i
-            else:
-                label = f"  {name}"
-            if target_sources:
-                detail = f"{destination} ({len(target_sources)} sources)"
-            else:
-                detail = destination
-            items.append([label, detail])
-            self._target_names.append(name)
+        items, self._target_names, selected_index = build_target_items(
+            self._config)
 
         self.window.show_quick_panel(
             items, self._on_target_select, selected_index=selected_index)
@@ -778,31 +818,14 @@ class RsyncProjectSettingsCommand(sublime_plugin.WindowCommand):
 
     def _show_project_picker(self):
         """Show project selection"""
-        self._projects = []
-        for folder in self.window.folders():
-            for root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    self._projects.append(
-                        os.path.join(root, '.rsyncproject'))
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-
+        self._projects = find_all_rsyncprojects(self.window)
         if not self._projects:
             sublime.error_message("No .rsyncproject found")
             return
 
         view = self.window.active_view()
         current = RsyncContext.get(view) if view else None
-
-        items = []
-        selected_index = 0
-        for i, p in enumerate(self._projects):
-            name = get_project_name(p)
-            if p == current:
-                label = f"● {name}"
-                selected_index = i
-            else:
-                label = f"  {name}"
-            items.append([label, os.path.dirname(p)])
+        items, selected_index = build_project_items(self._projects, current)
 
         self.window.show_quick_panel(
             items, self._on_project_select, selected_index=selected_index)
@@ -823,14 +846,7 @@ class RsyncSelectCommand(sublime_plugin.WindowCommand):
     """Select project and target for keyboard shortcuts"""
 
     def run(self):
-        self._projects = []
-        for folder in self.window.folders():
-            for root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    self._projects.append(
-                        os.path.join(root, '.rsyncproject'))
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-
+        self._projects = find_all_rsyncprojects(self.window)
         if not self._projects:
             sublime.error_message("No .rsyncproject found")
             return
@@ -839,6 +855,7 @@ class RsyncSelectCommand(sublime_plugin.WindowCommand):
         current = RsyncContext.get(view) if view else None
         is_manual = RsyncContext.is_manual(self.window)
 
+        # Build items with Auto option first
         items = []
         self._project_list = [None]  # None = auto mode
         selected_index = 0
@@ -849,14 +866,13 @@ class RsyncSelectCommand(sublime_plugin.WindowCommand):
         items.append([auto_label, "Clear manual selection"])
 
         for i, p in enumerate(self._projects):
-            project_dir = os.path.dirname(p)
             name = get_project_name(p)
             if p == current and is_manual:
                 label = f"● {name}"
                 selected_index = i + 1
             else:
                 label = f"  {name}"
-            items.append([label, project_dir])
+            items.append([label, os.path.dirname(p)])
             self._project_list.append(p)
 
         self.window.show_quick_panel(
@@ -895,26 +911,8 @@ class RsyncSelectCommand(sublime_plugin.WindowCommand):
 
     def _show_target_picker(self):
         """Show target selection"""
-        targets = self._config.get('targets', {})
-        active = self._config.get('active_target')
-
-        items = []
-        self._target_names = []
-        selected_index = 0
-
-        for i, (name, value) in enumerate(targets.items()):
-            destination, target_sources, _ = parse_target(value)
-            if name == active:
-                label = f"● {name}"
-                selected_index = i
-            else:
-                label = f"  {name}"
-            if target_sources:
-                detail = f"{destination} ({len(target_sources)} sources)"
-            else:
-                detail = destination
-            items.append([label, detail])
-            self._target_names.append(name)
+        items, self._target_names, selected_index = build_target_items(
+            self._config)
 
         self.window.show_quick_panel(
             items, self._on_target_select, selected_index=selected_index)
@@ -1044,24 +1042,13 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
             return
 
         self._path = paths[0]
-
-        # Find all projects in open folders
-        self._projects = []
-        for folder in self.window.folders():
-            for rsync_root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    self._projects.append(
-                        os.path.join(rsync_root, '.rsyncproject'))
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
+        self._projects = find_all_rsyncprojects(self.window)
 
         if not self._projects:
             sublime.error_message("No .rsyncproject found")
             return
 
-        items = [
-            [get_project_name(p), os.path.dirname(p)]
-            for p in self._projects
-        ]
+        items, _ = build_project_items(self._projects)
         self.window.show_quick_panel(items, self._on_project_select)
 
     def _on_project_select(self, index):
@@ -1084,22 +1071,35 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
     def _show_target_picker(self):
         """Show quick panel to select global or specific target"""
         targets = self._config.get('targets', {})
-        # active_target could be used to highlight in picker (TODO)
+        active = self._config.get('active_target')
 
         items = []
         self._target_names = [None]  # None = global
 
-        # Global option
-        items.append(["● Project (global)", "Add to global sources"])
+        # Global option - marked if no target has sources override
+        has_active_override = False
+        if active and active in targets:
+            _, t_sources, _ = parse_target(targets[active])
+            has_active_override = t_sources is not None
+
+        if has_active_override:
+            items.append(["  Project (global)", "Add to global sources"])
+        else:
+            items.append(["● Project (global)", "Add to global sources"])
 
         # Target options
         for name, value in targets.items():
             destination, t_sources, _ = parse_target(value)
-            if t_sources is not None:
-                label = f"  Target: {name}"
-                detail = f"{destination} (has sources override)"
+            has_override = t_sources is not None
+
+            if has_override and name == active:
+                label = f"● Target: {name}"
             else:
                 label = f"  Target: {name}"
+
+            if has_override:
+                detail = f"{destination} (has sources override)"
+            else:
                 detail = destination
 
             items.append([label, detail])
@@ -1128,11 +1128,10 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
     def is_visible(self, paths=None):
         if not paths:
             return False
+        # Check if any folder has a project
         for folder in self.window.folders():
-            for _root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    return True
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
+            if find_rsyncproject(folder):
+                return True
         return False
 
 
@@ -1158,48 +1157,36 @@ class RsyncSyncPathCommand(RsyncToolCommand):
 
     def _show_project_picker(self):
         """Show project picker, then target picker"""
-        self._projects = []
-        for folder in self.window.folders():
-            for rsync_root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    self._projects.append(
-                        os.path.join(rsync_root, '.rsyncproject'))
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-
-        if not self._projects:
+        all_projects = find_all_rsyncprojects(self.window)
+        if not all_projects:
             sublime.status_message("RsyncTool: no .rsyncproject found")
             return
 
         # Filter to projects where this path is in sources of any target
-        file_projects = []
-        for p in self._projects:
+        self._projects = []
+        for p in all_projects:
             config = load_rsyncproject(p)
             if not config:
                 continue
             root = get_project_root(p)
             targets = config.get('targets', {})
-            for _target_name, target_value in targets.items():
+            for target_value in targets.values():
                 _, target_sources, target_exclude = parse_target(target_value)
                 sources = target_sources or config.get('sources', [])
                 exclude = target_exclude or config.get('exclude', [])
                 if is_path_in_sources(self._path, root, sources, exclude):
-                    file_projects.append(p)
+                    self._projects.append(p)
                     break
 
-        if not file_projects:
+        if not self._projects:
             sublime.status_message("RsyncTool: path not in sources of any project")
             return
-
-        self._projects = file_projects
 
         if len(self._projects) == 1:
             self._on_project_select(0)
             return
 
-        items = [
-            [get_project_name(p), os.path.dirname(p)]
-            for p in self._projects
-        ]
+        items, _ = build_project_items(self._projects)
         self.window.show_quick_panel(items, self._on_project_select)
 
     def _on_project_select(self, index):
@@ -1261,38 +1248,33 @@ class RsyncSyncPathCommand(RsyncToolCommand):
         raise NotImplementedError
 
     def is_visible(self, paths=None):
-        """Show if any rsync project exists"""
+        """Show if path is within a rsync project"""
         if not paths:
             return False
-        for folder in self.window.folders():
-            for _root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    return True
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-        return False
+        return find_rsyncproject(paths[0]) is not None
 
     def is_enabled(self, paths=None):
-        """Enable only if path is in sources of some project/target"""
+        """Enable only if path is in sources of its project"""
         if not paths:
             return False
 
         path = paths[0]
-        for folder in self.window.folders():
-            for rsync_root, dirs, files in os.walk(folder):
-                if '.rsyncproject' in files:
-                    p = os.path.join(rsync_root, '.rsyncproject')
-                    config = load_rsyncproject(p)
-                    if not config:
-                        continue
-                    root = get_project_root(p)
-                    targets = config.get('targets', {})
-                    for target_value in targets.values():
-                        _, target_sources, target_exclude = parse_target(target_value)
-                        sources = target_sources or config.get('sources', [])
-                        exclude = target_exclude or config.get('exclude', [])
-                        if is_path_in_sources(path, root, sources, exclude):
-                            return True
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
+        rsyncproject = find_rsyncproject(path)
+        if not rsyncproject:
+            return False
+
+        config = load_rsyncproject(rsyncproject)
+        if not config:
+            return False
+
+        root = get_project_root(rsyncproject)
+        targets = config.get('targets', {})
+        for target_value in targets.values():
+            _, target_sources, target_exclude = parse_target(target_value)
+            sources = target_sources or config.get('sources', [])
+            exclude = target_exclude or config.get('exclude', [])
+            if is_path_in_sources(path, root, sources, exclude):
+                return True
         return False
 
 
