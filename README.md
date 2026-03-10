@@ -74,11 +74,15 @@ All commands available via Command Palette (`Cmd+Shift+P`) with `Rsync:` prefix.
 
 Right-click on files/folders → **Rsync**:
 
+- **Rsync to Remote...** - Push file/folder to remote server
+- **Rsync from Remote...** - Pull file/folder from remote server
 - **New Project...** - Create new project here
 - **Project Settings** - Open project configuration
 - **Add to Sources** - Add to sources list
 - **Add to Exclude** - Add to exclude list
 - **Add to Other Project...** - Add to another project's sources
+
+Note: "Rsync to/from Remote" are enabled only for files within configured `sources` and not in `exclude`.
 
 ## Configuration
 
@@ -136,7 +140,8 @@ Dry run adds `-n` to flags. CWD is set to project root (directory containing `.r
 ```json
 {
     "rsync_path": "rsync",
-    "show_console_during_sync": true
+    "show_console_during_sync": true,
+    "rsync_on_save": false
 }
 ```
 
@@ -144,6 +149,34 @@ Dry run adds `-n` to flags. CWD is set to project root (directory containing `.r
 |---------|-------------|
 | `rsync_path` | Path to rsync binary (default: `"rsync"`) |
 | `show_console_during_sync` | Show output panel during sync (default: `true`). If `false`, panel appears only on error. |
+| `rsync_on_save` | Auto-sync file on save (default: `false`). Can be overridden per-project. |
+
+### Auto-sync on Save
+
+When `rsync_on_save` is enabled, saving a file automatically syncs it to the remote if:
+- File is within configured `sources`
+- File is not excluded by `exclude` patterns
+
+Setting priority: **target → project → global**
+
+Per-project override in `.rsyncproject`:
+```json
+{
+    "rsync_on_save": true,
+    "targets": {
+        "dev": {
+            "destination": "user@dev:path/",
+            "rsync_on_save": true
+        },
+        "prod": {
+            "destination": "user@prod:path/",
+            "rsync_on_save": false
+        }
+    }
+}
+```
+
+Values: `true` (enabled), `false` (disabled), `null` or omitted (inherit from parent).
 
 ## Requirements
 

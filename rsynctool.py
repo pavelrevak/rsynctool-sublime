@@ -6,11 +6,12 @@ exclude patterns and relative paths.
 """
 import sublime
 import sublime_plugin
-import subprocess
-import threading
+import fnmatch
 import json
 import os
 import shlex
+import subprocess
+import threading
 
 
 def find_rsyncproject(path):
@@ -94,6 +95,99 @@ def parse_target(target_value):
         target_value.get('sources'),
         target_value.get('exclude'),
     )
+
+
+def is_path_in_sources(file_path, project_root, sources, exclude):
+    """Check if file/folder is within sources and not excluded.
+
+    Args:
+        file_path: Absolute path to file/folder
+        project_root: Absolute path to project root
+        sources: List of source paths (may contain .. notation)
+        exclude: List of exclude patterns
+
+    Returns:
+        True if path should be synced
+    """
+    if not sources:
+        return False
+
+    # Normalize file path
+    file_path = os.path.normpath(file_path)
+
+    # Check if file is within any source
+    in_sources = False
+    for source in sources:
+        # Resolve source path relative to project root
+        source_abs = os.path.normpath(os.path.join(project_root, source))
+        if file_path == source_abs or file_path.startswith(source_abs + os.sep):
+            in_sources = True
+            break
+
+    if not in_sources:
+        return False
+
+    # Check exclude patterns (match like rsync does)
+    if exclude:
+        filename = os.path.basename(file_path)
+        # Get path components for matching (skip .. parts)
+        rel_path = os.path.relpath(file_path, project_root)
+        path_parts = [p for p in rel_path.replace('\\', '/').split('/') if p and p != '..']
+
+        for pattern in exclude:
+            # Match against filename
+            if fnmatch.fnmatch(filename, pattern):
+                return False
+            # Match against each path component (like rsync does)
+            for part in path_parts:
+                if fnmatch.fnmatch(part, pattern):
+                    return False
+
+    return True
+
+
+def get_rsync_paths(file_path, project_root, sources, destination, is_dir=False):
+    """Calculate rsync paths for single file/folder sync.
+
+    Args:
+        file_path: Absolute path to file/folder
+        project_root: Absolute path to project root (CWD for rsync)
+        sources: List of source paths (may contain .. notation)
+        destination: Remote destination (e.g., user@host:path/)
+        is_dir: True if file_path is a directory
+
+    Returns:
+        (local_path, remote_path) for rsync, or (None, None) if not in sources
+    """
+    file_path = os.path.normpath(file_path)
+
+    for source in sources:
+        source_abs = os.path.normpath(os.path.join(project_root, source))
+        if file_path == source_abs or file_path.startswith(source_abs + os.sep):
+            # Found matching source
+            source_basename = os.path.basename(source_abs)
+            file_rel_to_source = os.path.relpath(file_path, source_abs)
+
+            if file_rel_to_source == '.':
+                # Syncing the source directory itself
+                local_path = source.rstrip('/') + '/'
+                remote_path = destination.rstrip('/') + '/' + source_basename + '/'
+            elif is_dir:
+                # Directory within source
+                local_path = source.rstrip('/') + '/' + file_rel_to_source + '/'
+                remote_path = destination.rstrip('/') + '/' + source_basename + '/' + file_rel_to_source + '/'
+            else:
+                # File within source
+                local_path = source.rstrip('/') + '/' + file_rel_to_source
+                file_dir = os.path.dirname(file_rel_to_source)
+                if file_dir:
+                    remote_path = destination.rstrip('/') + '/' + source_basename + '/' + file_dir + '/'
+                else:
+                    remote_path = destination.rstrip('/') + '/' + source_basename + '/'
+
+            return local_path.replace('\\', '/'), remote_path
+
+    return None, None
 
 
 def add_to_config_list(config, field, value, target_name=None):
@@ -369,21 +463,22 @@ class RsyncToolCommand(sublime_plugin.WindowCommand):
             process.wait()
             returncode = process.returncode
 
+            # Remove from process manager immediately (stops animation)
+            RsyncProcessManager.stop(window_id)
+
             sublime.set_timeout(
                 lambda: self.append_output(
                     f"\n[Finished with code {returncode}]\n"), 0)
 
-            # Show status message
             if returncode != 0:
                 sublime.set_timeout(
                     lambda rc=returncode: self._on_error(rc), 0)
-                # Restore normal status after 10 seconds
-                sublime.set_timeout(self._update_status, 10000)
             else:
                 sublime.set_timeout(
                     lambda: sublime.status_message("RsyncTool: sync completed"), 0)
-                # Restore normal status after 10 seconds
-                sublime.set_timeout(self._update_status, 10000)
+
+            # Restore normal status bar after 3 seconds
+            sublime.set_timeout(self._update_status, 3000)
 
         except FileNotFoundError:
             sublime.set_timeout(
@@ -1041,6 +1136,295 @@ class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
         return False
 
 
+class RsyncSyncPathCommand(RsyncToolCommand):
+    """Base class for sync file/folder commands"""
+
+    def run(self, paths=None, pick=True):
+        if not paths:
+            return
+
+        self._path = paths[0]
+        self._is_dir = os.path.isdir(self._path)
+
+        if pick:
+            self._show_project_picker()
+        else:
+            view = self.window.active_view()
+            rsyncproject = RsyncContext.get(view) if view else None
+            if rsyncproject:
+                config = load_rsyncproject(rsyncproject)
+                if config:
+                    self._do_sync(rsyncproject, config)
+
+    def _show_project_picker(self):
+        """Show project picker, then target picker"""
+        self._projects = []
+        for folder in self.window.folders():
+            for rsync_root, dirs, files in os.walk(folder):
+                if '.rsyncproject' in files:
+                    self._projects.append(
+                        os.path.join(rsync_root, '.rsyncproject'))
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+
+        if not self._projects:
+            sublime.status_message("RsyncTool: no .rsyncproject found")
+            return
+
+        # Filter to projects where this path is in sources of any target
+        file_projects = []
+        for p in self._projects:
+            config = load_rsyncproject(p)
+            if not config:
+                continue
+            root = get_project_root(p)
+            targets = config.get('targets', {})
+            for _target_name, target_value in targets.items():
+                _, target_sources, target_exclude = parse_target(target_value)
+                sources = target_sources or config.get('sources', [])
+                exclude = target_exclude or config.get('exclude', [])
+                if is_path_in_sources(self._path, root, sources, exclude):
+                    file_projects.append(p)
+                    break
+
+        if not file_projects:
+            sublime.status_message("RsyncTool: path not in sources of any project")
+            return
+
+        self._projects = file_projects
+
+        if len(self._projects) == 1:
+            self._on_project_select(0)
+            return
+
+        items = [
+            [get_project_name(p), os.path.dirname(p)]
+            for p in self._projects
+        ]
+        self.window.show_quick_panel(items, self._on_project_select)
+
+    def _on_project_select(self, index):
+        if index < 0:
+            return
+
+        self._rsyncproject = self._projects[index]
+        self._config = load_rsyncproject(self._rsyncproject)
+        if self._config is None:
+            sublime.status_message("RsyncTool: invalid JSON in .rsyncproject")
+            return
+
+        self._show_target_picker()
+
+    def _show_target_picker(self):
+        """Show target picker"""
+        targets = self._config.get('targets', {})
+        if not targets:
+            sublime.status_message("RsyncTool: no targets configured")
+            return
+
+        active = self._config.get('active_target')
+        items = []
+        self._target_names = []
+
+        for name, value in targets.items():
+            destination, target_sources, target_exclude = parse_target(value)
+            sources = target_sources or self._config.get('sources', [])
+            exclude = target_exclude or self._config.get('exclude', [])
+            root = get_project_root(self._rsyncproject)
+
+            if not is_path_in_sources(self._path, root, sources, exclude):
+                continue
+
+            label = f"● {name}" if name == active else f"  {name}"
+            items.append([label, destination])
+            self._target_names.append(name)
+
+        if not items:
+            sublime.status_message("RsyncTool: path not in sources for any target")
+            return
+
+        if len(items) == 1:
+            self._on_target_select(0)
+            return
+
+        self.window.show_quick_panel(items, self._on_target_select)
+
+    def _on_target_select(self, index):
+        if index < 0:
+            return
+
+        target_name = self._target_names[index]
+        self._config['active_target'] = target_name
+        self._do_sync(self._rsyncproject, self._config)
+
+    def _do_sync(self, rsyncproject, config):
+        """Override in subclass to perform actual sync"""
+        raise NotImplementedError
+
+    def is_visible(self, paths=None):
+        """Show if any rsync project exists"""
+        if not paths:
+            return False
+        for folder in self.window.folders():
+            for _root, dirs, files in os.walk(folder):
+                if '.rsyncproject' in files:
+                    return True
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+        return False
+
+    def is_enabled(self, paths=None):
+        """Enable only if path is in sources of some project/target"""
+        if not paths:
+            return False
+
+        path = paths[0]
+        for folder in self.window.folders():
+            for rsync_root, dirs, files in os.walk(folder):
+                if '.rsyncproject' in files:
+                    p = os.path.join(rsync_root, '.rsyncproject')
+                    config = load_rsyncproject(p)
+                    if not config:
+                        continue
+                    root = get_project_root(p)
+                    targets = config.get('targets', {})
+                    for target_value in targets.values():
+                        _, target_sources, target_exclude = parse_target(target_value)
+                        sources = target_sources or config.get('sources', [])
+                        exclude = target_exclude or config.get('exclude', [])
+                        if is_path_in_sources(path, root, sources, exclude):
+                            return True
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+        return False
+
+
+class RsyncPushCommand(RsyncSyncPathCommand):
+    """Push file/folder to remote"""
+
+    def _do_sync(self, rsyncproject, config):
+        """Sync single file or folder to remote"""
+        target_name, target_value = get_active_target(config)
+        if not target_value:
+            return
+
+        destination, target_sources, target_exclude = parse_target(target_value)
+        if not destination:
+            return
+
+        sources = target_sources or config.get('sources', [])
+        exclude = target_exclude or config.get('exclude', [])
+        root = get_project_root(rsyncproject)
+
+        # Get rsync paths
+        local_path, remote_path = get_rsync_paths(
+            self._path, root, sources, destination, self._is_dir)
+
+        if not local_path:
+            sublime.status_message("RsyncTool: path not in sources")
+            return
+
+        if not is_path_in_sources(self._path, root, sources, exclude):
+            sublime.status_message("RsyncTool: path excluded")
+            return
+
+        # Check if console should be shown
+        settings = sublime.load_settings('rsyncproject.sublime-settings')
+        show_console = settings.get('show_console_during_sync', True)
+
+        # Show info in panel
+        project_name = get_project_name(rsyncproject)
+        self.get_panel(clear=True)
+        if show_console:
+            self.show_panel()
+        self.append_output(f"Project: {project_name}\n")
+        self.append_output(f"Target: {target_name} ({destination})\n")
+        self.append_output(f"Push: {local_path} -> {remote_path}\n\n")
+
+        # Build rsync args
+        flags = config.get('flags', '-rv')
+        args = shlex.split(flags)
+
+        for pattern in exclude:
+            args.append(f'--exclude={pattern}')
+
+        # Push: local -> remote
+        args.append(local_path)
+        args.append(remote_path)
+
+        self.run_rsync(
+            args, cwd=root, clear=False,
+            project_name=project_name, target_name=target_name,
+            show_console=show_console)
+
+
+class RsyncPullCommand(RsyncSyncPathCommand):
+    """Pull file/folder from remote"""
+
+    def _do_sync(self, rsyncproject, config):
+        """Pull file or folder from remote"""
+        target_name, target_value = get_active_target(config)
+        if not target_value:
+            return
+
+        destination, target_sources, target_exclude = parse_target(target_value)
+        if not destination:
+            return
+
+        sources = target_sources or config.get('sources', [])
+        exclude = target_exclude or config.get('exclude', [])
+        root = get_project_root(rsyncproject)
+
+        # Get rsync paths
+        local_path, remote_path = get_rsync_paths(
+            self._path, root, sources, destination, self._is_dir)
+
+        if not local_path:
+            sublime.status_message("RsyncTool: path not in sources")
+            return
+
+        if not is_path_in_sources(self._path, root, sources, exclude):
+            sublime.status_message("RsyncTool: path excluded")
+            return
+
+        # For pull: adjust paths (remote needs full path, local needs parent dir)
+        if not self._is_dir:
+            remote_file = remote_path.rstrip('/') + '/' + os.path.basename(local_path)
+            local_dir = os.path.dirname(local_path)
+            if local_dir:
+                local_dir += '/'
+            else:
+                local_dir = './'
+            remote_path = remote_file
+            local_path = local_dir
+
+        # Check if console should be shown
+        settings = sublime.load_settings('rsyncproject.sublime-settings')
+        show_console = settings.get('show_console_during_sync', True)
+
+        # Show info in panel
+        project_name = get_project_name(rsyncproject)
+        self.get_panel(clear=True)
+        if show_console:
+            self.show_panel()
+        self.append_output(f"Project: {project_name}\n")
+        self.append_output(f"Target: {target_name} ({destination})\n")
+        self.append_output(f"Pull: {remote_path} -> {local_path}\n\n")
+
+        # Build rsync args (reversed: remote -> local)
+        flags = config.get('flags', '-rv')
+        args = shlex.split(flags)
+
+        for pattern in exclude:
+            args.append(f'--exclude={pattern}')
+
+        # Pull: remote -> local
+        args.append(remote_path)
+        args.append(local_path)
+
+        self.run_rsync(
+            args, cwd=root, clear=False,
+            project_name=project_name, target_name=target_name,
+            show_console=show_console)
+
+
 class RsyncUpdateStatusCommand(sublime_plugin.TextCommand):
     """Update status bar"""
 
@@ -1067,6 +1451,102 @@ class RsyncEventListener(sublime_plugin.EventListener):
     def on_activated(self, view):
         """Update status bar when switching tabs"""
         view.run_command('rsync_update_status')
+
+    def on_post_save_async(self, view):
+        """Auto-sync file on save if enabled"""
+        file_path = view.file_name()
+        if not file_path:
+            return
+
+        # Find project for this file
+        rsyncproject = find_rsyncproject(file_path)
+        if not rsyncproject:
+            return
+
+        config = load_rsyncproject(rsyncproject)
+        if not config:
+            return
+
+        # Get active target first (needed to check target-level rsync_on_save)
+        _target_name, target_value = get_active_target(config)
+        if not target_value:
+            return
+
+        # Check if rsync_on_save is enabled (target → project → global)
+        target_setting = None
+        if isinstance(target_value, dict):
+            target_setting = target_value.get('rsync_on_save')
+
+        if target_setting is not None:
+            enabled = target_setting
+        elif config.get('rsync_on_save') is not None:
+            enabled = config.get('rsync_on_save')
+        else:
+            settings = sublime.load_settings('rsyncproject.sublime-settings')
+            enabled = settings.get('rsync_on_save', False)
+
+        if not enabled:
+            return
+
+        # Parse target
+        destination, target_sources, target_exclude = parse_target(target_value)
+        if not destination:
+            return
+
+        # Get sources and exclude
+        sources = target_sources or config.get('sources', [])
+        exclude = target_exclude or config.get('exclude', [])
+
+        # Check if file is in sources and not excluded
+        root = get_project_root(rsyncproject)
+        if not is_path_in_sources(file_path, root, sources, exclude):
+            return
+
+        # Get rsync paths
+        local_path, remote_path = get_rsync_paths(
+            file_path, root, sources, destination, is_dir=False)
+        if not local_path:
+            return
+
+        # Build rsync command for single file
+        settings = sublime.load_settings('rsyncproject.sublime-settings')
+        rsync_path = settings.get('rsync_path', 'rsync')
+
+        flags = config.get('flags', '-rv')
+        args = shlex.split(flags)
+
+        # Exclude patterns
+        for pattern in exclude:
+            args.append(f'--exclude={pattern}')
+
+        args.append(local_path)
+        args.append(remote_path)
+
+        cmd = [rsync_path] + args
+
+        # Run rsync in background
+        def run_sync():
+            try:
+                result = subprocess.run(
+                    cmd, cwd=root, capture_output=True, text=True)
+                if result.returncode == 0:
+                    sublime.set_timeout(
+                        lambda: sublime.status_message(
+                            f"RsyncTool: synced {os.path.basename(file_path)}"),
+                        0)
+                else:
+                    sublime.set_timeout(
+                        lambda: sublime.status_message(
+                            f"RsyncTool: sync failed ({result.returncode})"),
+                        0)
+            except FileNotFoundError:
+                sublime.set_timeout(
+                    lambda: sublime.status_message(
+                        f"RsyncTool: rsync not found"),
+                    0)
+
+        thread = threading.Thread(target=run_sync)
+        thread.start()
 
     def on_exit(self):
         """Stop all rsync processes when Sublime Text exits"""

@@ -14,6 +14,17 @@
             },
             {"caption": "-"},
             {
+                "caption": "Rsync to Remote...",
+                "command": "rsync_push",
+                "args": {"paths": []}
+            },
+            {
+                "caption": "Rsync from Remote...",
+                "command": "rsync_pull",
+                "args": {"paths": []}
+            },
+            {"caption": "-"},
+            {
                 "caption": "Add to Sources...",
                 "command": "rsync_add_to_sources",
                 "args": {"paths": []}
