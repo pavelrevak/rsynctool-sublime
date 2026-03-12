@@ -1407,6 +1407,49 @@ class RsyncPullCommand(RsyncSyncPathCommand):
             show_console=show_console)
 
 
+class RsyncSyncFileCommand(RsyncToolCommand):
+    """Sync single file (internal command for rsync_on_save)"""
+
+    def run(self, rsyncproject, args, cwd, project_name, target_name):
+        RsyncContext.set(self.window, rsyncproject)
+        settings = sublime.load_settings('rsyncproject.sublime-settings')
+        show_console = settings.get('show_console_during_sync', True)
+        self.run_rsync(
+            args, cwd=cwd, clear=True,
+            project_name=project_name, target_name=target_name,
+            show_console=show_console)
+
+
+def get_plugin_path():
+    """Get path to plugin directory relative to Packages"""
+    plugin_dir = os.path.dirname(__file__)
+    packages_dir = os.path.dirname(plugin_dir)
+    return os.path.relpath(plugin_dir, packages_dir)
+
+
+class RsyncOpenSettingsCommand(sublime_plugin.WindowCommand):
+    """Open plugin settings"""
+
+    def run(self):
+        plugin = get_plugin_path()
+        self.window.run_command('edit_settings', {
+            'base_file': f'${{packages}}/{plugin}/rsyncproject.sublime-settings',
+            'user_file': '${packages}/User/rsyncproject.sublime-settings',
+            'default': '{\n\t$0\n}\n'
+        })
+
+
+class RsyncOpenKeybindingsCommand(sublime_plugin.WindowCommand):
+    """Open plugin key bindings"""
+
+    def run(self):
+        plugin = get_plugin_path()
+        platform = sublime.platform()
+        platform_name = {'osx': 'OSX', 'windows': 'Windows', 'linux': 'Linux'}[platform]
+        self.window.open_file(
+            f'{sublime.packages_path()}/{plugin}/Default ({platform_name}).sublime-keymap')
+
+
 class RsyncUpdateStatusCommand(sublime_plugin.TextCommand):
     """Update status bar"""
 
@@ -1450,7 +1493,7 @@ class RsyncEventListener(sublime_plugin.EventListener):
             return
 
         # Get active target first (needed to check target-level rsync_on_save)
-        _target_name, target_value = get_active_target(config)
+        target_name, target_value = get_active_target(config)
         if not target_value:
             return
 
@@ -1490,45 +1533,26 @@ class RsyncEventListener(sublime_plugin.EventListener):
         if not local_path:
             return
 
-        # Build rsync command for single file
-        settings = sublime.load_settings('rsyncproject.sublime-settings')
-        rsync_path = settings.get('rsync_path', 'rsync')
-
+        # Build rsync args
         flags = config.get('flags', '-rv')
         args = shlex.split(flags)
 
-        # Exclude patterns
         for pattern in exclude:
             args.append(f'--exclude={pattern}')
 
         args.append(local_path)
         args.append(remote_path)
 
-        cmd = [rsync_path] + args
-
-        # Run rsync in background
-        def run_sync():
-            try:
-                result = subprocess.run(
-                    cmd, cwd=root, capture_output=True, text=True)
-                if result.returncode == 0:
-                    sublime.set_timeout(
-                        lambda: sublime.status_message(
-                            f"RsyncTool: synced {os.path.basename(file_path)}"),
-                        0)
-                else:
-                    sublime.set_timeout(
-                        lambda: sublime.status_message(
-                            f"RsyncTool: sync failed ({result.returncode})"),
-                        0)
-            except FileNotFoundError:
-                sublime.set_timeout(
-                    lambda: sublime.status_message(
-                        f"RsyncTool: rsync not found"),
-                    0)
-
-        thread = threading.Thread(target=run_sync)
-        thread.start()
+        # Run via command (uses output panel)
+        window = view.window()
+        if window:
+            window.run_command('rsync_sync_file', {
+                'rsyncproject': rsyncproject,
+                'args': args,
+                'cwd': root,
+                'project_name': get_project_name(rsyncproject),
+                'target_name': target_name,
+            })
 
     def on_exit(self):
         """Stop all rsync processes when Sublime Text exits"""

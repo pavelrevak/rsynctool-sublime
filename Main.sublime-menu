@@ -39,22 +39,8 @@
                     {
                         "caption": "RsyncTool",
                         "children": [
-                            {
-                                "caption": "Settings",
-                                "command": "edit_settings",
-                                "args": {
-                                    "base_file": "${packages}/rsynctool-sublime/rsyncproject.sublime-settings",
-                                    "user_file": "${packages}/User/rsyncproject.sublime-settings",
-                                    "default": "{\n\t$0\n}\n"
-                                }
-                            },
-                            {
-                                "caption": "Key Bindings",
-                                "command": "open_file",
-                                "args": {
-                                    "file": "${packages}/rsynctool-sublime/Default (${platform}).sublime-keymap"
-                                }
-                            }
+                            {"caption": "Settings", "command": "rsync_open_settings"},
+                            {"caption": "Key Bindings", "command": "rsync_open_keybindings"}
                         ]
                     }
                 ]

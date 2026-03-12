@@ -19,20 +19,6 @@
     {"caption": "Rsync: Stop", "command": "rsync_stop"},
     {"caption": "Rsync: Select Project/Target...", "command": "rsync_select"},
     {"caption": "Rsync: Toggle Console", "command": "rsync_toggle_console"},
-    {
-        "caption": "Preferences: RsyncTool Settings",
-        "command": "edit_settings",
-        "args": {
-            "base_file": "${packages}/rsynctool-sublime/rsyncproject.sublime-settings",
-            "user_file": "${packages}/User/rsyncproject.sublime-settings",
-            "default": "{\n\t$0\n}\n"
-        }
-    },
-    {
-        "caption": "Preferences: RsyncTool Key Bindings",
-        "command": "open_file",
-        "args": {
-            "file": "${packages}/rsynctool-sublime/Default (${platform}).sublime-keymap"
-        }
-    }
+    {"caption": "Preferences: RsyncTool Settings", "command": "rsync_open_settings"},
+    {"caption": "Preferences: RsyncTool Key Bindings", "command": "rsync_open_keybindings"}
 ]
