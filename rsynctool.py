@@ -584,8 +584,11 @@ class RsyncSyncCommand(RsyncToolCommand):
             self._show_project_picker()
             return
 
-        rsyncproject, config = self.get_context()
+        rsyncproject, config = self.get_context(required=False)
         if not rsyncproject:
+            # Fallback to picker if no context found
+            self._dry_run = dry_run
+            self._show_project_picker()
             return
 
         self._execute_sync(rsyncproject, config, dry_run)
