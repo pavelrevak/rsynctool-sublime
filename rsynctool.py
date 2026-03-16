@@ -1037,6 +1037,54 @@ class RsyncAddToExcludeCommand(RsyncAddToListCommand):
     field = 'exclude'
 
 
+class RsyncSetActiveCommand(sublime_plugin.WindowCommand):
+    """Set project as active from sidebar"""
+
+    def run(self, paths=None):
+        if not paths:
+            return
+
+        rsyncproject = find_rsyncproject(paths[0])
+        if not rsyncproject:
+            return
+
+        RsyncContext.set(self.window, rsyncproject)
+        project_name = get_project_name(rsyncproject)
+
+        # Also show target picker if multiple targets
+        config = load_rsyncproject(rsyncproject)
+        if config and len(config.get('targets', {})) > 1:
+            self._rsyncproject = rsyncproject
+            self._config = config
+            self._project_name = project_name
+            self._show_target_picker()
+        else:
+            sublime.status_message(f"Active: {project_name}")
+            self.window.run_command('rsync_update_status')
+
+    def _show_target_picker(self):
+        items, self._target_names, selected_index = build_target_items(
+            self._config)
+        self.window.show_quick_panel(
+            items, self._on_target_select, selected_index=selected_index)
+
+    def _on_target_select(self, index):
+        if index < 0:
+            return
+
+        target_name = self._target_names[index]
+        self._config['active_target'] = target_name
+        save_rsyncproject(self._rsyncproject, self._config)
+
+        sublime.status_message(f"Active: {self._project_name}/{target_name}")
+        self.window.run_command('rsync_update_status')
+
+    def is_visible(self, paths=None):
+        if not paths:
+            return False
+        return find_rsyncproject(paths[0]) is not None
+
+
 class RsyncAddToOtherProjectCommand(sublime_plugin.WindowCommand):
     """Add file/folder to another project's sources"""
 

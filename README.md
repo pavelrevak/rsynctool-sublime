@@ -11,6 +11,7 @@ Push files to remote servers via rsync directly from Sublime Text. Configure mul
 - **Dry run** - Preview changes before syncing
 - **Auto-detection** - Finds `.rsyncproject` from current file upward
 - **Manual selection** - Switch between multiple projects
+- **Fallback picker** - Shows project list when no project is auto-detected
 - **Status bar** - Shows active project and target
 - **Sidebar integration** - Add files to sources/exclude via right-click
 
@@ -78,6 +79,7 @@ Right-click on files/folders → **Rsync**:
 - **Rsync from Remote...** - Pull file/folder from remote server
 - **New Project...** - Create new project here
 - **Project Settings** - Open project configuration
+- **Set as Active Project** - Set this project as active for keyboard shortcuts
 - **Add to Sources** - Add to sources list
 - **Add to Exclude** - Add to exclude list
 - **Add to Other Project...** - Add to another project's sources

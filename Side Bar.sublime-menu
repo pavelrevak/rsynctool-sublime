@@ -12,6 +12,11 @@
                 "caption": "Project Settings",
                 "command": "rsync_project_settings"
             },
+            {
+                "caption": "Set as Active Project",
+                "command": "rsync_set_active",
+                "args": {"paths": []}
+            },
             {"caption": "-"},
             {
                 "caption": "Rsync to Remote...",
