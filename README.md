@@ -12,7 +12,7 @@ Push files to remote servers via rsync directly from Sublime Text. Configure mul
 - **Auto-detection** - Finds `.rsyncproject` from current file upward
 - **Manual selection** - Switch between multiple projects
 - **Fallback picker** - Shows project list when no project is auto-detected
-- **Status bar** - Shows active project and target
+- **Status bar** - Shows active project and target (or `[N targets]` when selection required)
 - **Sidebar integration** - Add files to sources/exclude via right-click
 
 ## Quick Start
@@ -62,7 +62,7 @@ All commands available via Command Palette (`Cmd+Shift+P`) with `Rsync:` prefix.
 | **New Project...** | Create `.rsyncproject` file |
 | **Project Settings** | Open `.rsyncproject` for editing |
 | **Select Project...** | Choose active project |
-| **Select Target...** | Choose active target |
+| **Select Target...** | Choose active target (auto-shown when multiple targets) |
 
 ## Keyboard Shortcuts
 
@@ -158,6 +158,7 @@ Dry run adds `-n` to flags. CWD is set to project root (directory containing `.r
 When `rsync_on_save` is enabled, saving a file automatically syncs it to the remote if:
 - File is within configured `sources`
 - File is not excluded by `exclude` patterns
+- Target is selected (when multiple targets exist)
 
 Setting priority: **target → project → global**
 

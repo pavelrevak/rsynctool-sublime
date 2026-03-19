@@ -591,6 +591,15 @@ class RsyncSyncCommand(RsyncToolCommand):
             self._show_project_picker()
             return
 
+        # If multiple targets and no active_target set, show target picker
+        targets = config.get('targets', {})
+        if len(targets) > 1 and not config.get('active_target'):
+            self._dry_run = dry_run
+            self._rsyncproject = rsyncproject
+            self._config = config
+            self._show_target_picker()
+            return
+
         self._execute_sync(rsyncproject, config, dry_run)
 
     def _show_project_picker(self):
@@ -1299,33 +1308,31 @@ class RsyncSyncPathCommand(RsyncToolCommand):
         raise NotImplementedError
 
     def is_visible(self, paths=None):
-        """Show if path is within a rsync project"""
+        """Show if any rsync project exists in window"""
         if not paths:
             return False
-        return find_rsyncproject(paths[0]) is not None
+        # Show if there's any project in open folders
+        return bool(find_all_rsyncprojects(self.window))
 
     def is_enabled(self, paths=None):
-        """Enable only if path is in sources of its project"""
+        """Enable only if path is in sources of any project"""
         if not paths:
             return False
 
         path = paths[0]
-        rsyncproject = find_rsyncproject(path)
-        if not rsyncproject:
-            return False
+        for rsyncproject in find_all_rsyncprojects(self.window):
+            config = load_rsyncproject(rsyncproject)
+            if not config:
+                continue
 
-        config = load_rsyncproject(rsyncproject)
-        if not config:
-            return False
-
-        root = get_project_root(rsyncproject)
-        targets = config.get('targets', {})
-        for target_value in targets.values():
-            _, target_sources, target_exclude = parse_target(target_value)
-            sources = target_sources or config.get('sources', [])
-            exclude = target_exclude or config.get('exclude', [])
-            if is_path_in_sources(path, root, sources, exclude):
-                return True
+            root = get_project_root(rsyncproject)
+            targets = config.get('targets', {})
+            for target_value in targets.values():
+                _, target_sources, target_exclude = parse_target(target_value)
+                sources = target_sources or config.get('sources', [])
+                exclude = target_exclude or config.get('exclude', [])
+                if is_path_in_sources(path, root, sources, exclude):
+                    return True
         return False
 
 
@@ -1514,8 +1521,18 @@ class RsyncUpdateStatusCommand(sublime_plugin.TextCommand):
             config = load_rsyncproject(rsyncproject)
             name = get_project_name(rsyncproject)
             if config:
-                target_name, _ = get_active_target(config)
-                if target_name:
+                targets = config.get('targets', {})
+                active = config.get('active_target')
+                if active and active in targets:
+                    self.view.set_status(
+                        'rsync', f'RSYNC: {name}/{active}')
+                    return
+                elif len(targets) > 1:
+                    self.view.set_status(
+                        'rsync', f'RSYNC: {name}/[{len(targets)} targets]')
+                    return
+                elif len(targets) == 1:
+                    target_name = next(iter(targets))
                     self.view.set_status(
                         'rsync', f'RSYNC: {name}/{target_name}')
                     return
@@ -1546,7 +1563,13 @@ class RsyncEventListener(sublime_plugin.EventListener):
         if not config:
             return
 
-        # Get active target first (needed to check target-level rsync_on_save)
+        # Check if target is selected when multiple targets exist
+        targets = config.get('targets', {})
+        if len(targets) > 1 and not config.get('active_target'):
+            sublime.status_message("RsyncTool: select target first (Ctrl+Alt+R)")
+            return
+
+        # Get active target (needed to check target-level rsync_on_save)
         target_name, target_value = get_active_target(config)
         if not target_value:
             return
